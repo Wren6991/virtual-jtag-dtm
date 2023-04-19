@@ -18,6 +18,7 @@ add_executable(picoprobe
         src/get_serial.c
         src/sw_dp_pio.c
         src/jtag_dp_vdtm.c
+        src/jtag_vdtm.c
 )
 
 target_sources(picoprobe PRIVATE
