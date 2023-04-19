@@ -307,9 +307,11 @@ Configures the DAP Hardware I/O pins for JTAG mode:
  - TDO to input mode.
 */
 extern volatile uint32_t cached_delay;
+extern volatile bool disable_raw_swj_access;
+void jtag_setup_vdtm(void);
 __STATIC_INLINE void PORT_JTAG_SETUP (void) {
-  // No different from SWD setup
-  probe_init();
+  disable_raw_swj_access = true;
+  jtag_setup_vdtm();
   cached_delay = 0;
 }
 
@@ -320,6 +322,7 @@ Configures the DAP Hardware I/O pins for Serial Wire Debug (SWD) mode:
 */
 // hack - zap our "stop doing divides everywhere" cache
 __STATIC_INLINE void PORT_SWD_SETUP (void) {
+  disable_raw_swj_access = false;
   probe_init();
   cached_delay = 0;
 }

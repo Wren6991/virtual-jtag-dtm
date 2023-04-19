@@ -8,6 +8,12 @@
 #include <string.h>
 #include <stdlib.h>
 
+#define DUMP_DTM 1
+
+#if DUMP_DTM
+#include <stdio.h>
+#endif
+
 typedef enum jtag_tap_state {
 	S_RESET      = 0,
 	S_RUN_IDLE   = 1,
@@ -38,7 +44,7 @@ struct jtag_vdtm {
 	bool tck;
 	bool tms;
 	bool tdi;
-	bool tdo, tdo_next;
+	bool tdo;
 };
 
 jtag_vdtm_t *jtag_vdtm_create(uint32_t idcode) {
@@ -67,16 +73,29 @@ void jtag_vdtm_set_tdi(jtag_vdtm_t *dtm, bool tdi) {
 }
 
 bool jtag_vdtm_get_tdo(jtag_vdtm_t *dtm) {
-	return dtm->tdi;
+	return dtm->tdo;
 }
 
 static void tck_posedge(jtag_vdtm_t *dtm);
 
+static inline bool get_next_tdo(jtag_vdtm_t *dtm) {
+	// Note this is evaluated at negedge, so it is based on the *new* TAP
+	// state following the most recent posedge.
+	if (dtm->tap_state == S_SHIFT_DR || dtm->tap_state == S_SHIFT_IR) {
+		return dtm->shifter & 1;
+	} else {
+		return 0;
+	}
+}
+
 void jtag_vdtm_set_tck(jtag_vdtm_t *dtm, bool tck) {
 	if (tck && !dtm->tck) {
 		tck_posedge(dtm);
+#if DUMP_DTM > 1
+		printf("STEP TMS=%d TDI=%d -> TDO=%d\n", dtm->tms, dtm->tdi, get_next_tdo(dtm));
+#endif
 	} else if (!tck && dtm->tck) {
-		dtm->tdo = dtm->tdo_next;
+		dtm->tdo = get_next_tdo(dtm);
 	}
 	dtm->tck = tck;
 }
@@ -140,16 +159,24 @@ static void tck_posedge(jtag_vdtm_t *dtm) {
 	switch (dtm->tap_state) {
 	case S_RESET:
 		dtm->ir = IR_IDCODE;
+#if DUMP_DTM
+		printf("TAP: RESET\n");
+#endif
 		break;
 	case S_CAPTURE_IR:
 		dtm->shifter = dtm->ir;
+#if DUMP_DTM
+		printf("TAP: CAPTURE IR -> %02x\n", dtm->ir);
+#endif
 		break;
 	case S_SHIFT_IR:
-		dtm->tdo_next = dtm->shifter & 0x1;
 		dtm->shifter = (dtm->shifter >> 1) | ((uint64_t)dtm->tdi << (W_IR - 1));
 		break;
 	case S_UPDATE_IR:
 		dtm->ir = dtm->shifter;
+#if DUMP_DTM
+		printf("TAP: UPDATE  IR <- %02x\n", dtm->ir);
+#endif
 		break;
 	case S_CAPTURE_DR:
 		switch(dtm->ir) {
@@ -168,12 +195,17 @@ static void tck_posedge(jtag_vdtm_t *dtm) {
 		default:
 			break;
 		}
+#if DUMP_DTM
+		printf("TAP: CAPTURE DR -> %016llx\n", dtm->shifter);
+#endif
 		break;
 	case S_SHIFT_DR:
-		dtm->tdo_next = dtm->shifter & 0x1;
 		dtm->shifter = (dtm->shifter >> 1) | ((uint64_t)dtm->tdi << (dr_len(dtm->ir) - 1));
 		break;
 	case S_UPDATE_DR:
+#if DUMP_DTM
+		printf("TAP: UPDATE  DR <- %016llx\n", dtm->shifter);
+#endif
 		switch(dtm->ir) {
 		case IR_DTMCS:
 			handle_dtmcs_write(dtm, dtm->shifter);

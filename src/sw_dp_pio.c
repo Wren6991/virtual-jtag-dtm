@@ -34,6 +34,9 @@
 #define MAKE_KHZ(x) (CPU_CLOCK / (2000 * ((x) + 1)))
 volatile uint32_t cached_delay = 0;
 
+/* Hack to stub out all raw SWD functions when JTAG-DTM emulation is in use: */
+volatile bool disable_raw_swj_access = false;
+
 // Generate SWJ Sequence
 //   count:  sequence bit count
 //   data:   pointer to sequence bit data
@@ -54,7 +57,7 @@ void SWJ_Sequence (uint32_t count, const uint8_t *data) {
       bits = 8;
     else
       bits = n;
-    probe_write_bits(bits, *data++);
+    if (!disable_raw_swj_access) probe_write_bits(bits, *data++);
     n -= bits;
   }
 }

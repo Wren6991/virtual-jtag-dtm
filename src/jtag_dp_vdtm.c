@@ -29,45 +29,52 @@
 #include "DAP_config.h"
 #include "DAP.h"
 
-#include <stdio.h>
+#include "jtag_vdtm.h"
+
+#define DTM_IDCODE 0xdeadbeef
+static jtag_vdtm_t *dtm = 0;
+
+void jtag_setup_vdtm(void) {
+  dtm = jtag_vdtm_create(DTM_IDCODE);
+}
 
 // JTAG Macros
 
-#define PIN_TMS_SET() printf("TMS <- 1\n")
-#define PIN_TMS_CLR() printf("TMS <- 0\n")
+#define PIN_TMS_SET()    do {jtag_vdtm_set_tms(dtm, 1  );} while (0)
+#define PIN_TMS_CLR()    do {jtag_vdtm_set_tms(dtm, 0  );} while (0)
+#define PIN_TCK_SET()    do {jtag_vdtm_set_tck(dtm, 1  );} while (0)
+#define PIN_TCK_CLR()    do {jtag_vdtm_set_tck(dtm, 0  );} while (0)
+#define PIN_TDI_OUT(tdi) do {jtag_vdtm_set_tdi(dtm, tdi);} while (0)
+#define PIN_TDO_IN()         jtag_vdtm_get_tdo(dtm)
+#define PIN_DELAY()      do {                            } while (0)
 
-// Original Arm definitions are left commented out for reference (TODO clean
-// up once we have a real VDTM)
-#define JTAG_CYCLE_TCK() printf("TCK\n")
-// PIN_TCK_CLR();
-// PIN_DELAY();
-// PIN_TCK_SET();
-// PIN_DELAY();
+#define JTAG_CYCLE_TCK() \
+  PIN_TCK_CLR(); \
+  PIN_DELAY();   \
+  PIN_TCK_SET(); \
+  PIN_DELAY()
 
-#define JTAG_CYCLE_TDI(tdi) printf("TDI <- %u\nTCK\n", (unsigned int)(tdi) & 1)
-// PIN_TDI_OUT(tdi);
-// PIN_TCK_CLR();
-// PIN_DELAY();
-// PIN_TCK_SET();
-// PIN_DELAY()
+#define JTAG_CYCLE_TDI(tdi) \
+  PIN_TDI_OUT((tdi) & 1); \
+  PIN_TCK_CLR();          \
+  PIN_DELAY();            \
+  PIN_TCK_SET();          \
+  PIN_DELAY()
 
-#define JTAG_CYCLE_TDO(tdo) printf("TDO -> x\nTCK\n"); tdo = 0
-// PIN_TCK_CLR();
-// PIN_DELAY();
-// tdo = PIN_TDO_IN();
-// PIN_TCK_SET();
-// PIN_DELAY()
+#define JTAG_CYCLE_TDO(tdo) \
+  PIN_TCK_CLR();      \
+  PIN_DELAY();        \
+  tdo = PIN_TDO_IN(); \
+  PIN_TCK_SET();      \
+  PIN_DELAY()
 
-#define JTAG_CYCLE_TDIO(tdi,tdo) printf("TDI <- %u\nTDO -> x\nTCK\n", (unsigned int)(tdi) & 1); tdo = 0
-// PIN_TDI_OUT(tdi);
-// PIN_TCK_CLR();
-// PIN_DELAY();
-// tdo = PIN_TDO_IN();
-// PIN_TCK_SET();
-// PIN_DELAY()
-
-#define PIN_DELAY() PIN_DELAY_SLOW(DAP_Data.clock_delay)
-
+#define JTAG_CYCLE_TDIO(tdi,tdo) \
+  PIN_TDI_OUT((tdi) & 1); \
+  PIN_TCK_CLR();          \
+  PIN_DELAY();            \
+  tdo = PIN_TDO_IN();     \
+  PIN_TCK_SET();          \
+  PIN_DELAY()
 
 #if (DAP_JTAG != 0)
 
@@ -87,8 +94,6 @@ void JTAG_Sequence (uint32_t info, const uint8_t *tdi, uint8_t *tdo) {
   if (n == 0U) {
     n = 64U;
   }
-
-  printf("JTAG sequence, len=%lu\n", n);
 
   if (info & JTAG_SEQUENCE_TMS) {
     PIN_TMS_SET();
