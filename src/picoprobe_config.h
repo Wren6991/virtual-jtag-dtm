@@ -26,14 +26,14 @@
 #ifndef PICOPROBE_H_
 #define PICOPROBE_H_
 
-#if false
+#if true
 #define picoprobe_info(format,args...) printf(format, ## args)
 #else
 #define picoprobe_info(format,...) ((void)0)
 #endif
 
 
-#if false
+#if true
 #define picoprobe_debug(format,args...) printf(format, ## args)
 #else
 #define picoprobe_debug(format,...) ((void)0)

@@ -41,6 +41,8 @@
 #include "led.h"
 #include "DAP.h"
 
+#include "pico/stdio_uart.h"
+
 // UART0 for Picoprobe debug
 // UART1 for picoprobe to target device
 
@@ -88,6 +90,7 @@ void dap_thread(void *ptr)
 int main(void) {
     uint32_t resp_len;
 
+    stdio_uart_init();
     board_init();
     usb_serial_init();
     cdc_uart_init();
