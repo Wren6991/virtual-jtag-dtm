@@ -34,7 +34,7 @@ void probe_read_mode(void);
 void probe_write_mode(void);
 
 void probe_handle_read(uint total_bits);
-void probe_handle_write(uint8_t *data, uint total_bits);
+void probe_handle_write(const uint8_t *data, uint total_bits);
 
 void probe_task(void);
 void probe_gpio_init(void);

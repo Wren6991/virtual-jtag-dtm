@@ -217,7 +217,7 @@ void probe_handle_read(uint total_bits) {
     }
 }
 
-void probe_handle_write(uint8_t *data, uint total_bits) {
+void probe_handle_write(const uint8_t *data, uint total_bits) {
     picoprobe_debug("Write %d bits\n", total_bits);
 
     led_signal_activity(total_bits);

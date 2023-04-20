@@ -312,6 +312,7 @@ void jtag_setup_vdtm(void);
 __STATIC_INLINE void PORT_JTAG_SETUP (void) {
   disable_raw_swj_access = true;
   jtag_setup_vdtm();
+  probe_init();
   cached_delay = 0;
 }
 

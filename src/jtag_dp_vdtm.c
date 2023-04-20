@@ -49,31 +49,31 @@ void jtag_setup_vdtm(void) {
 #define PIN_DELAY()      do {                            } while (0)
 
 #define JTAG_CYCLE_TCK() \
-  PIN_TCK_CLR(); \
-  PIN_DELAY();   \
-  PIN_TCK_SET(); \
+  PIN_TCK_CLR();         \
+  PIN_DELAY();           \
+  PIN_TCK_SET();         \
   PIN_DELAY()
 
 #define JTAG_CYCLE_TDI(tdi) \
-  PIN_TDI_OUT((tdi) & 1); \
-  PIN_TCK_CLR();          \
-  PIN_DELAY();            \
-  PIN_TCK_SET();          \
+  PIN_TDI_OUT((tdi) & 1)  ; \
+  PIN_TCK_CLR();            \
+  PIN_DELAY();              \
+  PIN_TCK_SET();            \
   PIN_DELAY()
 
 #define JTAG_CYCLE_TDO(tdo) \
-  PIN_TCK_CLR();      \
-  PIN_DELAY();        \
-  tdo = PIN_TDO_IN(); \
-  PIN_TCK_SET();      \
+  PIN_TCK_CLR();            \
+  PIN_DELAY();              \
+  tdo = PIN_TDO_IN();       \
+  PIN_TCK_SET();            \
   PIN_DELAY()
 
 #define JTAG_CYCLE_TDIO(tdi,tdo) \
-  PIN_TDI_OUT((tdi) & 1); \
-  PIN_TCK_CLR();          \
-  PIN_DELAY();            \
-  tdo = PIN_TDO_IN();     \
-  PIN_TCK_SET();          \
+  PIN_TDI_OUT((tdi) & 1);        \
+  PIN_TCK_CLR();                 \
+  PIN_DELAY();                   \
+  tdo = PIN_TDO_IN();            \
+  PIN_TCK_SET();                 \
   PIN_DELAY()
 
 #if (DAP_JTAG != 0)
