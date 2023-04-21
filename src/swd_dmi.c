@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 
 
 #include "swd_dmi.h"
+
 #include "probe.h"
+#include "hardware/gpio.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -30,17 +32,17 @@
 
 struct swd_dmi {
 	uint32_t addr_cache;
-	uint32_t targetid;
+	uint32_t targetsel;
 	uint apsel;
 	bool addr_cache_valid;
 };
 
-swd_dmi_t *swd_dmi_create(uint32_t targetid, uint apsel) {
+swd_dmi_t *swd_dmi_create(uint32_t targetsel, uint apsel) {
 	swd_dmi_t *dmi = malloc(sizeof(swd_dmi_t));
 	if (!dmi)
 		return dmi;
 	memset(dmi, 0, sizeof(*dmi));
-	dmi->targetid = targetid;
+	dmi->targetsel = targetsel;
 	dmi->apsel = apsel;
 	return dmi;
 }
@@ -49,20 +51,84 @@ swd_dmi_t *swd_dmi_create(uint32_t targetid, uint apsel) {
 // IO functions
 
 // TODO these should probably be passed as a function table to swd_dmi_create()
+// TODO use PIO instead of bitbang
+
+#define PROBE_PIN_SWCLK 2
+#define PROBE_PIN_SWDIO 3
+
+static inline void set_swdo(bool x) {
+	gpio_put(PROBE_PIN_SWDIO, x);
+}
+
+static inline void set_swdo_en(bool x) {
+	gpio_set_dir(PROBE_PIN_SWDIO, x);
+}
+
+static inline void set_swclk(bool x) {
+	gpio_put(PROBE_PIN_SWCLK, x);
+}
+
+static inline bool get_swdi(void) {
+	return gpio_get(PROBE_PIN_SWDIO);
+}
+
+static inline void bitbang_delay(void) {
+	// 12 cycles (~0.1 us @ 125 MHz) -> ~5 MHz SWCLK
+	asm volatile (
+		"   b 1f\n"
+		"1: b 1f\n"
+		"1: b 1f\n"
+		"1: b 1f\n"
+		"1: b 1f\n"
+		"1: b 1f\n"
+		"1     :\n"
+	);
+}
 
 static void put_bits(const uint8_t *tx, int n_bits) {
-	probe_handle_write(tx, n_bits);
+	set_swdo_en(1);
+	uint8_t shifter = 0;
+	for (int i = 0; i < n_bits; ++i) {
+		if (i % 8 == 0)
+			shifter = tx[i / 8];
+		else
+			shifter >>= 1;
+		set_swdo(shifter & 1u);
+		bitbang_delay();
+		set_swclk(1);
+		bitbang_delay();
+		set_swclk(0);
+	}
+
 }
 
 static void get_bits(uint8_t *rx, int n_bits) {
-	for (int i = 0; i < n_bits; i += 8) {
-		int chunk = n_bits - i < 8 ? n_bits - i : 8;		
-		rx[i >> 3] = probe_read_bits(chunk) & 0xff;
+	uint8_t shifter = 0;
+	set_swdo_en(0);
+	for (int i = 0; i < n_bits; ++i) {
+		bitbang_delay();
+		bool sample = get_swdi();
+		set_swclk(1);
+		bitbang_delay();
+		set_swclk(0);
+
+		shifter = (shifter >> 1) | (sample << 7);
+		if (i % 8 == 7)
+			rx[i / 8] = shifter;
+	}
+	if (n_bits % 8 != 0) {
+		rx[n_bits / 8] = shifter >> (8 - n_bits % 8);
 	}
 }
 
 static void hiz_clocks(int n_bits) {
-	(void)probe_read_bits(n_bits);
+	set_swdo_en(0);
+	for (int i = 0; i < n_bits; ++i) {
+		bitbang_delay();
+		set_swclk(1);
+		bitbang_delay();
+		set_swclk(0);
+	}
 }
 
 // ----------------------------------------------------------------------------
@@ -167,7 +233,7 @@ static inline swd_status_t swd_write(ap_dp_t ap_ndp, uint8_t addr, uint32_t data
 // - A line reset, then SWD-to-Dormant. (If the link is up, down it.)
 // - Dormant-to-SWD
 // - Line reset
-// - TARGETSEL using provided TARGETID value
+// - TARGETSEL using provided value
 // - Read DPIDR to exit reset state
 // - Write all ABORT bits
 // - Write CDBGPWRUPREQ, CSYSPWRUPREQ, ORUNDETECT = 1
@@ -229,13 +295,21 @@ static const uint link_down_up_bits = sizeof(link_down_up) * 8 - 4;
 
 int swd_dmi_connect(swd_dmi_t *dmi) {
 	dmi_debug("Attempting connection\n");
+
+	gpio_init(PROBE_PIN_SWDIO);
+	gpio_init(PROBE_PIN_SWCLK);
+	gpio_set_dir(PROBE_PIN_SWCLK, 1);
+
 	dmi->addr_cache_valid = false;
 	// Drive the fixed link cycling sequence, which should put us in Reset
-	probe_handle_write(link_down_up, link_down_up_bits);
+	put_bits(link_down_up, link_down_up_bits);
+
 	// TARGETSEL puts any non-matching DPs in the Reset state into the
 	// Deselected state (which is functionally similar to the lockout state).
 	// Note there is no response to TARGETSEL.
-	swd_targetsel(dmi->targetid);
+	if (dmi->targetsel != 0)
+		swd_targetsel(dmi->targetsel);
+
 	// DPIDR read required to leave Reset state -- ignore the value, since
 	// anything that responds after TARGETSEL is assumed the correct target.
 	uint32_t data;
