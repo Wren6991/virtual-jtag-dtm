@@ -8,11 +8,24 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define DUMP_DTM 1
-
-#if DUMP_DTM
-#include <stdio.h>
+#ifndef DTM_LOG_LEVEL
+#define DTM_LOG_LEVEL 3
 #endif
+
+#if DTM_LOG_LEVEL > 0
+#include <stdio.h>
+#define dtm_log_at_level(level, ...) do { \
+	if (DTM_LOG_LEVEL >= level) printf(__VA_ARGS__); \
+} while (0)
+#else
+#define dtm_log_at_level(level, ...) ((void)0)
+#endif
+
+#define dtm_info(...)     dtm_log_at_level(1, __VA_ARGS__)
+#define dtm_debug(...)    dtm_log_at_level(2, __VA_ARGS__)
+#define dtm_dump_dmi(...) dtm_log_at_level(3, __VA_ARGS__)
+#define dtm_dump_tap(...) dtm_log_at_level(4, __VA_ARGS__)
+#define dtm_dump_tck(...) dtm_log_at_level(5, __VA_ARGS__)
 
 typedef enum jtag_tap_state {
 	S_RESET      = 0,
@@ -56,6 +69,10 @@ jtag_vdtm_t *jtag_vdtm_create(uint32_t idcode) {
 	return dtm;
 }
 
+void jtag_vdtm_destroy(jtag_vdtm_t *dtm) {
+	free(dtm);
+}
+
 void jtag_vdtm_set_write_callback(jtag_vdtm_t *dtm, jtag_vdtm_write_callback cb) {
 	dtm->write_callback = cb;
 }
@@ -91,9 +108,7 @@ static inline bool get_next_tdo(jtag_vdtm_t *dtm) {
 void jtag_vdtm_set_tck(jtag_vdtm_t *dtm, bool tck) {
 	if (tck && !dtm->tck) {
 		tck_posedge(dtm);
-#if DUMP_DTM > 1
-		printf("STEP TMS=%d TDI=%d -> TDO=%d\n", dtm->tms, dtm->tdi, get_next_tdo(dtm));
-#endif
+		dtm_dump_tck("STEP TMS=%d TDI=%d -> TDO=%d\n", dtm->tms, dtm->tdi, get_next_tdo(dtm));
 	} else if (!tck && dtm->tck) {
 		dtm->tdo = get_next_tdo(dtm);
 	}
@@ -159,24 +174,18 @@ static void tck_posedge(jtag_vdtm_t *dtm) {
 	switch (dtm->tap_state) {
 	case S_RESET:
 		dtm->ir = IR_IDCODE;
-#if DUMP_DTM
-		printf("TAP: RESET\n");
-#endif
+		dtm_dump_tap("TAP: RESET\n");
 		break;
 	case S_CAPTURE_IR:
 		dtm->shifter = dtm->ir;
-#if DUMP_DTM
-		printf("TAP: CAPTURE IR -> %02x\n", dtm->ir);
-#endif
+		dtm_dump_tap("TAP: CAPTURE IR -> %02x\n", dtm->ir);
 		break;
 	case S_SHIFT_IR:
 		dtm->shifter = (dtm->shifter >> 1) | ((uint64_t)dtm->tdi << (W_IR - 1));
 		break;
 	case S_UPDATE_IR:
 		dtm->ir = dtm->shifter;
-#if DUMP_DTM
-		printf("TAP: UPDATE  IR <- %02x\n", dtm->ir);
-#endif
+		dtm_dump_tap("TAP: UPDATE  IR <- %02x\n", dtm->ir);
 		break;
 	case S_CAPTURE_DR:
 		switch(dtm->ir) {
@@ -195,17 +204,13 @@ static void tck_posedge(jtag_vdtm_t *dtm) {
 		default:
 			break;
 		}
-#if DUMP_DTM
-		printf("TAP: CAPTURE DR -> %016llx\n", dtm->shifter);
-#endif
+		dtm_dump_tap("TAP: CAPTURE DR -> %011llx\n", dtm->shifter);
 		break;
 	case S_SHIFT_DR:
 		dtm->shifter = (dtm->shifter >> 1) | ((uint64_t)dtm->tdi << (dr_len(dtm->ir) - 1));
 		break;
 	case S_UPDATE_DR:
-#if DUMP_DTM
-		printf("TAP: UPDATE  DR <- %016llx\n", dtm->shifter);
-#endif
+		dtm_dump_tap("TAP: UPDATE  DR <- %011llx\n", dtm->shifter);
 		switch(dtm->ir) {
 		case IR_DTMCS:
 			handle_dtmcs_write(dtm, dtm->shifter);
@@ -239,8 +244,10 @@ static void handle_dmi_write(jtag_vdtm_t *dtm, uint64_t dr_shifter) {
 
 	if (op == DMI_OP_WRITE && dtm->write_callback) {
 		dtm->write_callback(addr, wdata);
+		dtm_dump_dmi("DMI W %02x <- %08lx\n", addr, wdata);
 	} else if (op == DMI_OP_READ && dtm->read_callback) {
-		dtm->dmi_rdata = dtm->read_callback(addr);
+		dtm->read_callback(addr, &dtm->dmi_rdata);
+		dtm_dump_dmi("DMI R %02x -> %08lx\n", addr, dtm->dmi_rdata);
 	}
 }
 
