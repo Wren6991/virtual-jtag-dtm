@@ -23,12 +23,14 @@ typedef uint8_t dmi_addr_t;
 typedef void (*jtag_vdtm_write_callback)(dmi_addr_t addr, uint32_t data);
 
 // A function for the DTM to call when it wants to perform a DMI read
-typedef uint32_t (*jtag_vdtm_read_callback)(dmi_addr_t addr);
+typedef void (*jtag_vdtm_read_callback)(dmi_addr_t addr, uint32_t *data);
 
 // Dynamically allocate a new instance, initialise it, and pass you a pointer
 // (which is opaque to you -- only the implementation file has the struct
-// definition.) Call free() when you're done with it.
+// definition)
 jtag_vdtm_t *jtag_vdtm_create(uint32_t idcode);
+
+void jtag_dtm_destroy(jtag_vdtm_t *dtm);
 
 // IO functions. You can connect these up to e.g. JTAG bitbang macros in the
 // CMSIS-DAP JTAG_DP.c code.

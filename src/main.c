@@ -43,6 +43,32 @@
 
 #include "pico/stdio_uart.h"
 
+#include "swd_dmi.h"
+
+#define DM_DATA0        0x04
+#define DM_DMCONTROL    0x10
+#define DM_DMSTATUS     0x11
+#define DM_HARTINFO     0x12
+#define DM_HALTSUM1     0x13
+#define DM_HALTSUM0     0x40
+#define DM_HAWINDOWSEL  0x14
+#define DM_HAWINDOW     0x15
+#define DM_ABSTRACTCS   0x16
+#define DM_COMMAND      0x17
+#define DM_ABSTRACTAUTO 0x18
+#define DM_CONFSTRPTR0  0x19
+#define DM_CONFSTRPTR1  0x1a
+#define DM_CONFSTRPTR2  0x1b
+#define DM_CONFSTRPTR3  0x1c
+#define DM_NEXTDM       0x1d
+#define DM_PROGBUF0     0x20
+#define DM_PROGBUF1     0x21
+#define DM_SBCS         0x38
+#define DM_SBADDRESS0   0x39
+#define DM_SBDATA0      0x3c
+
+
+
 // UART0 for Picoprobe debug
 // UART1 for picoprobe to target device
 
@@ -87,10 +113,62 @@ void dap_thread(void *ptr)
     } while (1);
 }
 
+static int test_swd_dmi(void) {
+    probe_init();
+
+    swd_dmi_t *dmi = swd_dmi_create(0, 0);
+    printf("\n\nIssuing connect sequence...\n");
+    int rc = swd_dmi_connect(dmi);
+    if (rc) {
+        printf("Failed to connect\n");
+        return rc;
+    }
+    printf("Connected successfully\n");
+
+    uint32_t data;
+    swd_dmi_read(dmi, DM_DMSTATUS, &data);
+    printf("dstatus   = %08lx\n", data);
+    if ((data & 0xf) == 0x2) {
+        printf("RISC-V debug version: 0.13\n");
+    } else {
+        printf("Unknown RISC-V debug version\n");
+        return -1;
+    }
+
+    swd_dmi_write(dmi, DM_DMCONTROL, 0);
+    swd_dmi_write(dmi, DM_DMCONTROL, 1);
+    swd_dmi_read(dmi, DM_DMCONTROL, &data);
+    if (data != 1) {
+        printf("Failed to set dmcontrol.dmactive=1\n");
+        return -1;
+    }
+
+    // Detect number of harts on this DM (should be 1 for us)
+    int hart;
+    for (hart = 0; hart < 32; ++hart) {
+        uint32_t dmcontrol_wdata = 1 | (hart << 16);
+        swd_dmi_write(dmi, DM_DMCONTROL, dmcontrol_wdata);
+        // Running out of hasel index bits means no more harts:
+        swd_dmi_read(dmi, DM_DMCONTROL, &data);
+        if (data != dmcontrol_wdata)
+            break;
+        // anyunavail=1 also means no more harts:
+        swd_dmi_read(dmi, DM_DMSTATUS, &data);
+        if (data & (1u << 12))
+            break;
+    }
+    printf("Discovered %d harts\n", hart);
+
+    return 0;
+}
+
 int main(void) {
     uint32_t resp_len;
 
     stdio_uart_init();
+    (void)test_swd_dmi();
+
+
     board_init();
     usb_serial_init();
     cdc_uart_init();

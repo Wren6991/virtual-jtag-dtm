@@ -30,12 +30,29 @@
 #include "DAP.h"
 
 #include "jtag_vdtm.h"
+#include "swd_dmi.h"
 
-#define DTM_IDCODE 0xdeadbeef
+#define DTM_IDCODE    0xdeadbeef
+#define DMI_TARGETSEL 0
+#define DMI_APSEL     0
+
 static jtag_vdtm_t *dtm = 0;
+static swd_dmi_t *dmi = 0;
+
+void vdtm_write_dmi(dmi_addr_t addr, uint32_t wdata) {
+  swd_dmi_write(dmi, addr, wdata);
+}
+
+void vdtm_read_dmi(dmi_addr_t addr, uint32_t *rdata) {
+  swd_dmi_read(dmi, addr, rdata);
+}
 
 void jtag_setup_vdtm(void) {
   dtm = jtag_vdtm_create(DTM_IDCODE);
+  dmi = swd_dmi_create(DMI_TARGETSEL, DMI_APSEL);
+  jtag_vdtm_set_write_callback(dtm, &vdtm_write_dmi);
+  jtag_vdtm_set_read_callback(dtm, &vdtm_read_dmi);
+  (void)swd_dmi_connect(dmi);
 }
 
 // JTAG Macros

@@ -17,15 +17,15 @@
 #endif
 
 #if DMI_DEBUG
-#define dmi_debug(format,args...) printf(format, ## args)
+#define dmi_debug(...) printf(__VA_ARGS__)
 #else
-#define dmi_debug(format,...) ((void)0)
+#define dmi_debug(...) ((void)0)
 #endif
 
 #if DMI_INFO
-#define dmi_info(format,args...) printf(format, ## args)
+#define dmi_info(...) printf(__VA_ARGS__)
 #else
-#define dmi_info(format,...) ((void)0)
+#define dmi_info(...) ((void)0)
 #endif
 
 #define PWRUP_ACK_TIMEOUT 10000
@@ -45,6 +45,10 @@ swd_dmi_t *swd_dmi_create(uint32_t targetsel, uint apsel) {
 	dmi->targetsel = targetsel;
 	dmi->apsel = apsel;
 	return dmi;
+}
+
+void swd_dmi_destroy(swd_dmi_t *dmi) {
+	free(dmi);
 }
 
 // ----------------------------------------------------------------------------
@@ -383,9 +387,9 @@ int swd_dmi_connect(swd_dmi_t *dmi) {
 
 static inline void set_addr(swd_dmi_t *dmi, uint32_t addr) {
 	if (dmi->addr_cache_valid && dmi->addr_cache == addr) {
-		dmi_debug("TAR cache hit\n");
+		// dmi_debug("TAR cache hit\n");
 	} else {
-		dmi_debug("TAR <- %08lx\n", addr);
+		// dmi_debug("TAR <- %08lx\n", addr);
 		swd_write(AP, AP_REG_TAR, addr);
 		dmi->addr_cache_valid = true;
 		dmi->addr_cache = addr;

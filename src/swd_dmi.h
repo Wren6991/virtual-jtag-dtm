@@ -19,8 +19,10 @@ struct swd_dmi;
 typedef struct swd_dmi swd_dmi_t;
 
 // Dynamically allocate a DMI instance, and initialise its members (but do not
-// attempt to connect the SWD link). Call free() when you're done with it.
+// attempt to connect the SWD link).
 swd_dmi_t *swd_dmi_create(uint32_t targetid, uint apsel);
+
+void swd_dmi_destroy(swd_dmi_t *dmi);
 
 // Call repeatedly until a connection is established, at which point it will
 // return 0. (Main reason for failure will be no target being connected!)
@@ -28,9 +30,8 @@ int swd_dmi_connect(swd_dmi_t *dmi);
 
 // TODO errors
 
-// Note these functions scale their addresses by four (so that word-sized DM
-// registers can be addressed with the word addresses listed in the RISC-V
-// debug spec)
+// Note these functions scale their addresses by four (Mem-AP uses byte
+// addresses, and DM registers are nominally word-addressed)
 void swd_dmi_write(swd_dmi_t *dmi, uint32_t addr, uint32_t data);
 
 void swd_dmi_read(swd_dmi_t *dmi, uint32_t addr, uint32_t *data);
