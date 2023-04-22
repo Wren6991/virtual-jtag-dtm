@@ -195,6 +195,7 @@ static inline swd_status_t swd_read(ap_dp_t ap_ndp, uint8_t addr, uint32_t *data
 	get_bits(rxbuf, 1);
 	// Turnaround for next packet header
 	hiz_clocks(1);
+	dmi_debug("  SWD R %cP:%x -> %08lx\n", "DA"[(int)ap_ndp], 4 * addr, *data);
 	return (swd_status_t)status;
 }
 
@@ -214,6 +215,7 @@ static inline swd_status_t swd_write(ap_dp_t ap_ndp, uint8_t addr, uint32_t data
 	for (int i = 0; i < 32; ++i)
 		txbuf[0] ^= (data >> i) & 0x1;
 	put_bits(txbuf, 1);
+	dmi_debug("  SWD W %cP:%x <- %08lx\n", "DA"[(int)ap_ndp], 4 * addr, data);
 	return (swd_status_t)status;
 }
 
@@ -287,14 +289,14 @@ static const uint8_t link_down_up[] = {
 	0xa2, 0x0e, 0xbc, 0x19,
 	// Four zero-bits, 8 bits of select sequence, four more zeroes
 	0xa0, 0x01,
-	// A line reset (50 cyc high) then at least 2 zeroes (6 here)
+	// A line reset (50 cyc high) then at least 2 zeroes
 	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x03
 };
 
 static const uint link_down_up_bits = sizeof(link_down_up) * 8 - 4;
 
 int swd_dmi_connect(swd_dmi_t *dmi) {
-	dmi_debug("Attempting connection\n");
+	dmi_debug("swd_dmi_connect targetsel=%08lx apsel=%u\n", dmi->targetsel, dmi->apsel);
 
 	gpio_init(PROBE_PIN_SWDIO);
 	gpio_init(PROBE_PIN_SWCLK);
@@ -318,6 +320,7 @@ int swd_dmi_connect(swd_dmi_t *dmi) {
 		dmi_debug("DPIDR read failed\n");
 		return -1;
 	}
+	dmi_debug("Read DPIDR: %08lx\n", data);
 
 	// Clear any outstanding errors via ABORT so that SELECT becomes writable
 	status = swd_write(DP, DP_REG_ABORT, 0x1e);
@@ -365,11 +368,12 @@ int swd_dmi_connect(swd_dmi_t *dmi) {
 		dmi_info("Bad APIDR: %08lx\n", data);
 		return -1;
 	}
+	dmi_debug("Read APIDR: %08lx\n", data);
 
 	// Set up SELECT to point to CSW/TAR/DRW. Note we don't use the BDx
 	// registers as they seem unlikely to be profitable based on the RISC-V
 	// DM memory map, and on the additional AP bank switching they entail.
-	status = swd_write(DP, DP_REG_SELECT, AP_BANK_IDR | (dmi->apsel << 24));
+	status = swd_write(DP, DP_REG_SELECT, AP_BANK_CSW | (dmi->apsel << 24));
 	if (status != OK) {
 		return -1;
 	}
@@ -378,7 +382,10 @@ int swd_dmi_connect(swd_dmi_t *dmi) {
 }
 
 static inline void set_addr(swd_dmi_t *dmi, uint32_t addr) {
-	if (!dmi->addr_cache_valid || dmi->addr_cache != addr)  {
+	if (dmi->addr_cache_valid && dmi->addr_cache == addr) {
+		dmi_debug("TAR cache hit\n");
+	} else {
+		dmi_debug("TAR <- %08lx\n", addr);
 		swd_write(AP, AP_REG_TAR, addr);
 		dmi->addr_cache_valid = true;
 		dmi->addr_cache = addr;
@@ -394,10 +401,9 @@ void swd_dmi_write(swd_dmi_t *dmi, uint32_t addr, uint32_t data) {
 	(void)swd_write(AP, AP_REG_DRW, data);
 };
 
-uint32_t swd_dmi_read(swd_dmi_t *dmi, uint32_t addr) {
+void swd_dmi_read(swd_dmi_t *dmi, uint32_t addr, uint32_t *data) {
 	addr <<= 2;
 	set_addr(dmi, addr);
-	uint32_t data;
-	(void)swd_read(AP, AP_REG_DRW, &data);
-	return data;
+	(void)swd_read(AP, AP_REG_DRW, data);
+	(void)swd_read(DP, DP_REG_RDBUF, data);
 }

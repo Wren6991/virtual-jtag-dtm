@@ -33,6 +33,6 @@ int swd_dmi_connect(swd_dmi_t *dmi);
 // debug spec)
 void swd_dmi_write(swd_dmi_t *dmi, uint32_t addr, uint32_t data);
 
-uint32_t swd_dmi_read(swd_dmi_t *dmi, uint32_t addr);
+void swd_dmi_read(swd_dmi_t *dmi, uint32_t addr, uint32_t *data);
 
 #endif
